@@ -2,7 +2,28 @@
 PhishGuard AI — AI-Based Phishing Email and Malicious URL Detection System
 Weighted explainable risk engine + dedicated URL/link threat module + SOC-style dashboard UI.
 """
+import streamlit as st
 
+st.set_page_config(
+    page_title="PhishGuard AI",
+    page_icon="🛡️",
+    layout="wide"
+)
+
+# Facebook, Messenger & WhatsApp-er jonno custom preview photo O title set kora
+st.markdown(
+    """
+    <head>
+        <meta property="og:title" content="PhishGuard AI — Email & URL Threat Analysis" />
+        <meta property="og:description" content="Bilingual AI-powered Phishing Email and Malicious URL Detection System" />
+        <meta property="og:image" content="https://raw.githubusercontent.com/mohibulislamweb/Phishing-Email-and-URL-Detection-System/main/preview.png" />
+        <meta property="og:image:type" content="image/png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+    </head>
+    """,
+    unsafe_allow_html=True
+)
 import re
 import ipaddress
 from io import BytesIO
