@@ -1,0 +1,23 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual Environments
+venv/
+env/
+
+# IDE files
+.vscode/
+.idea/
+
+# Distribution / Build
+dist/
+build/
+*.egg-info/
+
+# Environment variables (API Keys & Secrets)
+.env
+.env.local
+.env.*.local
+
+.streamlit/secrets.toml

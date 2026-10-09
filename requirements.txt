@@ -5,3 +5,7 @@ scikit-learn
 joblib
 reportlab
 lightgbm
+mail-parser
+requests
+folium
+streamlit-folium

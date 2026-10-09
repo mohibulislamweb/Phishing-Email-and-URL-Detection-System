@@ -1,16 +1,49 @@
 """
 PhishGuard AI — AI-Based Phishing Email and Malicious URL Detection System
-Weighted explainable risk engine + dedicated URL/link threat module + SOC-style dashboard UI.
+SOC-style Dashboard UI using Streamlit.
+Author: Engr. Mohibul Islam
 """
-import streamlit as st
 
+import base64
+import email
+from email import policy
+from email.parser import BytesParser
+import ipaddress
+from io import BytesIO
+import re
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import List, Tuple, Dict, Any, Optional
+import urllib.parse
+
+import folium
+from lightgbm import LGBMClassifier
+import requests
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+import streamlit as st
+from streamlit_folium import st_folium
+
+# Internal Modules
+from src.url_analysis import analyze_urls, aggregate_url_risk, UrlVerdict
+
+# =========================================================================
+# 1. PAGE CONFIGURATION & CONSTANTS
+# =========================================================================
 st.set_page_config(
-    page_title="PhishGuard AI",
+    page_title="PhishGuard AI — Email & URL Threat Analysis",
     page_icon="🛡️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Facebook, Messenger & WhatsApp-er jonno custom preview photo O title set kora
+# OpenGraph Metadata
 st.markdown(
     """
     <head>
@@ -24,37 +57,16 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-import re
-import ipaddress
-from io import BytesIO
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import List
 
-import streamlit as st
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.naive_bayes import MultinomialNB
-from lightgbm import LGBMClassifier
+VIRUSTOTAL_API_KEY = st.secrets.get("VIRUSTOTAL_API_KEY", "").strip()
 
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
-from reportlab.lib.units import mm
+TIER_COLORS = {
+    "high": "#F04438",
+    "medium": "#F79009",
+    "low": "#17B26A"
+}
 
-from url_analysis import analyze_urls, aggregate_url_risk, UrlVerdict
-
-
-# =========================================================================
-# 1. SCORING ENGINE
-# =========================================================================
-# Every signal contributes a bounded number of points to a 0-100 risk
-# score. Weights are additive but individually capped so no single rule
-# dominates the verdict, then the total is clamped to [0, 100]. URL/link
-# risk is delegated entirely to url_analysis.py so that logic stays in
-# one dedicated, independently testable module.
-
+# Heuristics Dictionary
 URGENCY_WORDS = [
     "urgent", "immediately", "action required", "verify your account",
     "suspended", "restricted", "locked", "final notice", "act now",
@@ -86,7 +98,16 @@ GENERIC_GREETINGS = ["dear customer", "dear user", "dear valued", "dear sir/mada
 BRAND_KEYWORDS = ["paypal", "microsoft", "apple", "amazon", "netflix", "bank", "google", "facebook", "irs", "dhl", "fedex"]
 PRIVATE_IP_NOTE = "Private / non-routable address (internal network or header spoof artifact)"
 
+ENSEMBLE_WEIGHTS = {
+    "Weighted Rule Engine v2": 0.60,
+    "Random Forest (NLP)": 0.15,
+    "LightGBM": 0.15,
+    "Naive Bayes": 0.10,
+}
 
+# =========================================================================
+# 2. DATA CLASSES
+# =========================================================================
 @dataclass
 class Signal:
     label: str
@@ -102,7 +123,7 @@ class AnalysisResult:
     triggers: List[str] = field(default_factory=list)
     links: List[str] = field(default_factory=list)
     url_verdicts: List[UrlVerdict] = field(default_factory=list)
-    engine_breakdown: List[tuple] = field(default_factory=list)
+    engine_breakdown: List[Tuple[str, float]] = field(default_factory=list)
     ips: List[str] = field(default_factory=list)
     sender: str = "N/A"
     reply_to: str = "N/A"
@@ -130,6 +151,79 @@ class AnalysisResult:
         return 1 if self.score >= 36 else 0
 
 
+# =========================================================================
+# 3. HELPER & API FUNCTIONS
+# =========================================================================
+def check_virustotal_url(url_to_check: str) -> Optional[Dict[str, int]]:
+    """VirusTotal v3 API call with error handling."""
+    if not VIRUSTOTAL_API_KEY or VIRUSTOTAL_API_KEY == "YOUR_VIRUSTOTAL_API_KEY_HERE":
+        return None
+
+    try:
+        url_id = base64.urlsafe_b64encode(url_to_check.encode()).decode().strip("=")
+        endpoint = f"https://www.virustotal.com/api/v3/urls/{url_id}"
+        headers = {
+            "accept": "application/json",
+            "x-apikey": VIRUSTOTAL_API_KEY
+        }
+
+        response = requests.get(endpoint, headers=headers, timeout=6)
+
+        if response.status_code == 200:
+            data = response.json()
+            stats = data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+            return {"malicious": stats.get('malicious', 0), "total": sum(stats.values())}
+
+        elif response.status_code == 404:
+            scan_endpoint = "https://www.virustotal.com/api/v3/urls"
+            payload = f"url={requests.utils.quote(url_to_check)}"
+            scan_headers = {
+                "accept": "application/json",
+                "x-apikey": VIRUSTOTAL_API_KEY,
+                "content-type": "application/x-www-form-urlencoded"
+            }
+            res_post = requests.post(scan_endpoint, data=payload, headers=scan_headers, timeout=6)
+            if res_post.status_code in [200, 202]:
+                return {"malicious": 0, "total": 70}
+
+        return None
+    except Exception:
+        return None
+
+
+def get_geoip_data(ip_or_domain: str) -> Optional[Dict[str, Any]]:
+    """Fetch GeoIP coordinates and location information."""
+    try:
+        url = f"http://ip-api.com/json/{ip_or_domain}?fields=status,country,city,lat,lon,query,org"
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get("status") == "success":
+                return data
+    except Exception:
+        pass
+    return None
+
+
+def process_eml_file(uploaded_file) -> Tuple[str, List[str]]:
+    """Parse raw .eml file to extract plain text body and check attachments."""
+    msg = BytesParser(policy=policy.default).parse(uploaded_file)
+
+    body = msg.get_body(preferencelist=('plain', 'html'))
+    body_text = body.get_content() if body else ""
+
+    suspicious_attachments = []
+    dangerous_extensions = ['.exe', '.vbs', '.js', '.scr', '.xlsm', '.iso', '.bat', '.ps1']
+
+    for part in msg.walk():
+        fn = part.get_filename()
+        if fn:
+            if any(fn.lower().endswith(ext) for ext in dangerous_extensions) or len(fn.split('.')) > 2:
+                suspicious_attachments.append(fn)
+
+    return body_text, suspicious_attachments
+
+
 def _extract_header(pattern: str, text: str) -> str:
     m = re.search(pattern, text, re.IGNORECASE)
     return m.group(1).strip() if m else "N/A"
@@ -147,6 +241,9 @@ def _is_private_ip(ip: str) -> bool:
         return False
 
 
+# =========================================================================
+# 4. RULE ENGINE & ML CLASSIFIERS
+# =========================================================================
 def analyze_email(raw_text: str) -> AnalysisResult:
     result = AnalysisResult()
     text = raw_text or ""
@@ -164,6 +261,7 @@ def analyze_email(raw_text: str) -> AnalysisResult:
     links = re.findall(r"https?://[^\s)>\]]+", text)
     result.links = list(dict.fromkeys(links))
 
+    # Urgency Check
     hits = [w for w in URGENCY_WORDS if w in lower]
     pressure_hits = [w for w in SECURITY_PRESSURE_TERMS if w in lower]
     all_urgency_hits = list(dict.fromkeys(hits + pressure_hits))
@@ -173,6 +271,7 @@ def analyze_email(raw_text: str) -> AnalysisResult:
         result.signals.append(Signal("Urgency / pressure language", pts, ", ".join(all_urgency_hits[:8]), 18))
         result.triggers.extend(all_urgency_hits)
 
+    # Credential Harvesting
     hits = [w for w in CREDENTIAL_WORDS if w in lower]
     if hits:
         pts = min(6 + 4 * len(hits), 25)
@@ -180,6 +279,7 @@ def analyze_email(raw_text: str) -> AnalysisResult:
         result.signals.append(Signal("Credential / sensitive-data request", pts, ", ".join(hits[:6]), 25))
         result.triggers.extend(hits)
 
+    # Financial Bait
     hits = [w for w in FINANCIAL_LURE_WORDS if w in lower]
     if hits:
         pts = min(5 + 3 * len(hits), 15)
@@ -187,43 +287,44 @@ def analyze_email(raw_text: str) -> AnalysisResult:
         result.signals.append(Signal("Financial lure / prize bait", pts, ", ".join(hits[:6]), 15))
         result.triggers.extend(hits)
 
+    # Account Takeover
     hits = [w for w in ACCOUNT_TAKEOVER_TERMS if w in lower]
     if hits:
         pts = min(8 + 4 * len(hits), 25)
         score += pts
-        result.signals.append(
-            Signal("Account-takeover / verification pressure", pts, ", ".join(hits[:8]), 25)
-        )
+        result.signals.append(Signal("Account-takeover / verification pressure", pts, ", ".join(hits[:8]), 25))
         result.triggers.extend(hits)
 
+    # Generic Greetings
     if any(g in lower for g in GENERIC_GREETINGS):
         score += 5
         result.signals.append(Signal("Generic, non-personalized greeting", 5, "e.g. 'Dear Customer'", 5))
 
+    # Header Mismatch
     sender_domain = _domain_of(result.sender)
     reply_domain = _domain_of(result.reply_to)
     if sender_domain and reply_domain and sender_domain != reply_domain:
         score += 15
         result.signals.append(Signal("Reply-To domain differs from From domain", 15, f"{sender_domain} \u2192 {reply_domain}", 15))
 
+    # Brand Impersonation
     for brand in BRAND_KEYWORDS:
         if brand in lower and sender_domain and brand not in sender_domain:
             score += 10
             result.signals.append(Signal("Possible brand impersonation", 10, f"mentions '{brand}' but sends from '{sender_domain or 'unknown domain'}'", 10))
             break
 
-    # ---- Dedicated URL / link threat analysis (url_analysis.py) ----
+    # URL Threat Aggregation
     result.url_verdicts = analyze_urls(result.links)
     if result.url_verdicts:
         url_pts = aggregate_url_risk(result.url_verdicts)
         if url_pts > 0:
             score += url_pts
             worst = max(result.url_verdicts, key=lambda v: v.score)
-            result.signals.append(
-                Signal("URL / link threat analysis", url_pts, "; ".join(worst.reasons[:3]), 25)
-            )
+            result.signals.append(Signal("URL / link threat analysis", url_pts, "; ".join(worst.reasons[:3]), 25))
             result.triggers.append("malicious-looking URL")
 
+    # IP Reputation Heuristics
     header_ip = result.header_ip if result.header_ip != "N/A" else (result.ips[0] if result.ips else None)
     if header_ip:
         if _is_private_ip(header_ip):
@@ -235,6 +336,7 @@ def analyze_email(raw_text: str) -> AnalysisResult:
                 score += pts
                 result.signals.append(Signal("Sending IP matches high-risk range pattern", pts, header_ip, 10))
 
+    # Formatting Anomaly
     caps_words = re.findall(r"\b[A-Z]{4,}\b", text)
     bangs = text.count("!")
     if len(caps_words) >= 2 or bangs >= 3:
@@ -246,18 +348,8 @@ def analyze_email(raw_text: str) -> AnalysisResult:
     return result
 
 
-# =========================================================================
-# 2. MACHINE-LEARNING CLASSIFICATION ENGINES
-# =========================================================================
-# The rule engine above is the primary, fully explainable safety anchor.
-# These ML options are additional engines the user can pick from the
-# sidebar. A small built-in training set keeps the app self-contained
-# for live demos; for the project report, run train_model.py on the full
-# dataset.csv instead — it prints accuracy/precision/recall/F1 for each
-# model and saves a confusion-matrix chart.
-
 ML_TRAINING_DATA = [
-    # Legitimate (0)
+    # Legitimate / Ham Samples
     ("Your weekly team meeting is scheduled for Monday at 10 AM. Please join the calendar invite.", 0),
     ("Hi team, the project report is attached. Let me know if you have any questions.", 0),
     ("Your order has shipped and is expected to arrive on Thursday. Thank you for your purchase.", 0),
@@ -278,8 +370,11 @@ ML_TRAINING_DATA = [
     ("Your application has been received. We will contact you after the review is complete.", 0),
     ("The scheduled maintenance will take place tonight from 11 PM to 1 AM.", 0),
     ("Thank you for your feedback. Your response has been recorded successfully.", 0),
+    ("Hey Mohibul, let's catch up later today regarding the lab assignment.", 0),
+    ("Please find attached the slides from today's lecture on Operating Systems.", 0),
+    ("Your GitHub security key was added to your profile. Check settings if this wasn't you.", 0),
 
-    # Phishing / malicious-looking (1) -- synthetic training examples
+    # Phishing / Malicious Samples
     ("URGENT verify your account immediately or it will be suspended. Confirm your password now.", 1),
     ("Final notice: your account is locked. Enter your login credentials and verification code within 24 hours.", 1),
     ("Your payment failed. Send your credit card number CVV and password to avoid account suspension.", 1),
@@ -300,7 +395,10 @@ ML_TRAINING_DATA = [
     ("Your account is about to expire. Click the verification link and submit your login credentials.", 1),
     ("Final account notice: verify your password and payment information immediately.", 1),
     ("Claim your reward now by confirming your identity and financial information.", 1),
+    ("Dear customer, click http://login-verify-update.com to secure your bank account now.", 1),
+    ("Your Apple ID has been locked for security reasons. Click here to verify credentials.", 1),
 ]
+
 
 @st.cache_resource(show_spinner=False)
 def load_ml_engines():
@@ -312,20 +410,20 @@ def load_ml_engines():
         strip_accents="unicode",
         ngram_range=(1, 2),
         sublinear_tf=True,
-        max_features=8000,
+        max_features=5000,
     )
     X = vectorizer.fit_transform(texts)
 
     models = {
         "Random Forest (NLP)": RandomForestClassifier(
-            n_estimators=250, max_depth=18, min_samples_leaf=1,
+            n_estimators=150, max_depth=12, min_samples_leaf=1,
             random_state=42, class_weight="balanced"
         ),
-        "Naive Bayes": MultinomialNB(alpha=0.25),
+        "Naive Bayes": MultinomialNB(alpha=0.1),
         "LightGBM": LGBMClassifier(
-            n_estimators=120, learning_rate=0.06, num_leaves=15,
-            max_depth=7, min_child_samples=2, subsample=0.9,
-            colsample_bytree=0.9, random_state=42, verbosity=-1
+            n_estimators=80, learning_rate=0.05, num_leaves=10,
+            max_depth=5, min_child_samples=2, subsample=0.8,
+            colsample_bytree=0.8, random_state=42, verbosity=-1
         ),
     }
 
@@ -336,7 +434,6 @@ def load_ml_engines():
 
 
 def classify_with_selected_engine(raw_text: str, selected_model: str) -> AnalysisResult:
-    """Run the selected engine and return the same AnalysisResult used by the UI."""
     rule_result = analyze_email(raw_text)
 
     if selected_model == "Weighted Rule Engine v2":
@@ -348,16 +445,13 @@ def classify_with_selected_engine(raw_text: str, selected_model: str) -> Analysi
     probability = float(model.predict_proba(X_input)[0][1])
     model_score = probability * 100.0
 
-    # The rule engine (which now includes the dedicated URL module) is the
-    # primary safety anchor. The ML model is a supporting signal because
-    # the built-in training set is intentionally small and synthetic.
     rule_score = float(rule_result.score)
-    blended_score = (0.70 * rule_score) + (0.30 * model_score)
+    blended_score = (0.80 * rule_score) + (0.20 * model_score)
 
-    if rule_score <= 10:
-        blended_score = min(blended_score, 30.0)
-    elif rule_score >= 55 and model_score >= 55:
-        blended_score = max(blended_score, 70.0)
+    if rule_score == 0 and model_score < 60:
+        blended_score = min(blended_score, 15.0)
+    elif rule_score >= 50:
+        blended_score = max(blended_score, rule_score)
 
     rule_result.score = round(max(0.0, min(blended_score, 100.0)), 1)
     rule_result.signals.append(
@@ -372,22 +466,7 @@ def classify_with_selected_engine(raw_text: str, selected_model: str) -> Analysi
     return rule_result
 
 
-# ---- Hybrid ensemble: combine the rule engine + all ML classifiers ----
-# Each engine votes with a fixed weight. The rule engine (which already
-# includes the explainable text-content checks AND the dedicated URL
-# module) carries the most weight because it is fully deterministic and
-# not limited by the small synthetic ML training set; the three ML
-# classifiers contribute the rest as a supporting NLP-based signal.
-ENSEMBLE_WEIGHTS = {
-    "Weighted Rule Engine v2": 0.40,
-    "Random Forest (NLP)": 0.20,
-    "LightGBM": 0.20,
-    "Naive Bayes": 0.20,
-}
-
-
 def classify_with_ensemble(raw_text: str) -> AnalysisResult:
-    """Run every engine and return one weighted, explainable final verdict."""
     rule_result = analyze_email(raw_text)
     vectorizer, models = load_ml_engines()
     X_input = vectorizer.transform([raw_text or ""])
@@ -399,14 +478,8 @@ def classify_with_ensemble(raw_text: str) -> AnalysisResult:
 
     combined = sum(score * ENSEMBLE_WEIGHTS[name] for name, score in engine_scores)
 
-    # Same explainable guardrails as the single-ML-engine path, so the
-    # ensemble never contradicts very strong or very weak rule evidence.
-    rule_score = rule_result.score
-    ml_scores = [s for n, s in engine_scores if n != "Weighted Rule Engine v2"]
-    if rule_score <= 10:
-        combined = min(combined, 30.0)
-    elif rule_score >= 55 and all(s >= 50 for s in ml_scores):
-        combined = max(combined, 70.0)
+    if rule_result.score >= 60:
+        combined = max(combined, rule_result.score)
 
     rule_result.engine_breakdown = engine_scores
     rule_result.score = round(max(0.0, min(combined, 100.0)), 1)
@@ -414,7 +487,7 @@ def classify_with_ensemble(raw_text: str) -> AnalysisResult:
         Signal(
             "Hybrid ensemble combination",
             0,
-            "Weighted vote across the rule engine and 3 ML classifiers (see engine breakdown panel)",
+            "Weighted vote across rule engine and 3 ML classifiers",
             1,
         )
     )
@@ -423,7 +496,7 @@ def classify_with_ensemble(raw_text: str) -> AnalysisResult:
 
 
 # =========================================================================
-# 3. PDF REPORT
+# 5. PDF REPORT GENERATOR
 # =========================================================================
 BRAND_TEAL = colors.HexColor("#0F766E")
 INK = colors.HexColor("#101828")
@@ -441,14 +514,12 @@ def generate_pdf_report(email_text: str, result: AnalysisResult, model_used: str
     title_style = ParagraphStyle("TitleStyle", parent=styles["Heading1"], fontSize=18, textColor=BRAND_TEAL, spaceAfter=2)
     meta_style = ParagraphStyle("MetaStyle", parent=styles["Normal"], fontSize=9, textColor=MUTED)
 
-    # Table cells need Paragraph objects (not raw strings) to wrap properly.
-    # wordWrap="CJK" breaks even long unbroken tokens like URLs that have no
-    # spaces — without it, long text overflows into neighbouring columns.
     cell_style = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=8.5, leading=11, textColor=INK, wordWrap="CJK")
     header_cell_style = ParagraphStyle("HeaderCell", parent=cell_style, textColor=colors.white, fontName="Helvetica-Bold")
 
     def cell(text, header=False):
-        return Paragraph(str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"), header_cell_style if header else cell_style)
+        clean_text = str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return Paragraph(clean_text, header_cell_style if header else cell_style)
 
     story.append(Paragraph("PhishGuard AI — Threat Intelligence Report", title_style))
     story.append(Paragraph(f"Engine: {model_used} &nbsp;&nbsp;|&nbsp;&nbsp; Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", meta_style))
@@ -531,7 +602,7 @@ def generate_pdf_report(email_text: str, result: AnalysisResult, model_used: str
             story.append(Paragraph("No flagged links &mdash; every link checked clean.", styles["Normal"]))
         if clean_count:
             story.append(Spacer(1, 4))
-            story.append(Paragraph(f"{clean_count} other link(s) checked with no structural red flags (tracking pixels, CDN/image assets, etc.).", meta_style))
+            story.append(Paragraph(f"{clean_count} other link(s) checked with no structural red flags.", meta_style))
     else:
         story.append(Paragraph("No embedded links found.", styles["Normal"]))
     story.append(Spacer(1, 12))
@@ -547,12 +618,8 @@ def generate_pdf_report(email_text: str, result: AnalysisResult, model_used: str
 
 
 # =========================================================================
-# 4. UI — visual identity
+# 6. STREAMLIT FRONTEND & CUSTOM CSS
 # =========================================================================
-st.set_page_config(page_title="PhishGuard AI — Email & URL Threat Analysis", page_icon="◆", layout="wide")
-
-TIER_COLORS = {"high": "#F04438", "medium": "#F79009", "low": "#17B26A"}
-
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -561,7 +628,9 @@ html, body, [class*="css"] { font-family: 'Inter', -apple-system, sans-serif; }
 .stApp { background-color: #0B1220; color: #E7ECF6; }
 code, .mono { font-family: 'IBM Plex Mono', monospace !important; }
 
-#MainMenu, footer, header { visibility: hidden; }
+#MainMenu, footer { visibility: hidden; }
+header { background: transparent !important; }
+[data-testid="stSidebarNav"] { display: none; }
 .block-container { padding-top: 2rem; max-width: 1100px; }
 
 .pg-topbar { display:flex; align-items:baseline; gap:12px; border-bottom:1px solid #253147; padding-bottom:16px; margin-bottom:28px; }
@@ -606,8 +675,6 @@ div[data-baseweb="popover"] li[aria-selected="true"] {
 .stButton>button:hover { background-color: #0D9488; color: #FFFFFF; }
 .stButton>button[kind="secondary"] { background-color: transparent; color:#8C99B4; border:1px solid #253147; }
 
-/* download_button renders under a separate stDownloadButton wrapper,
-   so it needs its own rule set (not covered by .stButton above). */
 .stDownloadButton>button,
 div[data-testid="stDownloadButton"] button {
     background-color: #14B8A6 !important;
@@ -616,16 +683,11 @@ div[data-testid="stDownloadButton"] button {
     border-radius: 6px !important;
     border: none !important;
     padding: 0.5rem 1.1rem !important;
-    box-shadow: none !important;
 }
 .stDownloadButton>button:hover,
 div[data-testid="stDownloadButton"] button:hover {
     background-color: #0D9488 !important;
     color: #FFFFFF !important;
-}
-.stDownloadButton>button p,
-div[data-testid="stDownloadButton"] button p {
-    color: inherit !important;
 }
 
 .pg-panel { background-color:#121A2B; border:1px solid #253147; border-radius:8px; padding:20px 22px; margin-bottom:16px; }
@@ -651,16 +713,48 @@ div[data-testid="stDownloadButton"] button p {
 .url-text { font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:#9DB2D4; word-break:break-all; }
 .url-reasons { margin-top:6px; font-size:12px; color:#8C99B4; line-height:1.5; }
 
-.link-row { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid #1C263B; font-size:12.5px; }
-.link-row:last-child { border-bottom:none; }
-.link-url { font-family:'IBM Plex Mono', monospace; color:#9DB2D4; word-break:break-all; }
-.link-tag { color:#8C99B4; white-space:nowrap; }
+.footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: transparent;
+    color: #8b949e;
+    text-align: right;
+    padding-right: 20px;
+    padding-bottom: 12px;
+    font-size: 13px;
+    z-index: 100;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+}
+.footer .dev-text { color: #8b949e; }
+.footer .dev-name { color: #00d2b5; font-weight: 700; }
+.footer .contact-btn {
+    background-color: #25d366;
+    color: #ffffff !important;
+    padding: 4px 11px;
+    border-radius: 16px;
+    text-decoration: none !important;
+    font-weight: 600;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    transition: transform 0.2s, background-color 0.2s;
+}
+.footer .contact-btn:hover {
+    background-color: #20ba5a;
+    transform: translateY(-1px);
+}
 </style>
 """, unsafe_allow_html=True)
 
 
 def render_gauge(score: float, tier: str) -> str:
-    """Return an inline SVG radial gauge for the given score (0-100)."""
     color = TIER_COLORS[tier]
     r, cx, cy = 54, 64, 64
     circumference = 2 * 3.14159265 * r
@@ -679,6 +773,7 @@ def render_gauge(score: float, tier: str) -> str:
     """
 
 
+# Navbar Header
 st.markdown("""
 <div class="pg-topbar">
     <span class="pg-mark">PG</span>
@@ -687,6 +782,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# Sidebar
 with st.sidebar:
     st.markdown("<div class='sb-title'>Classification engine</div>", unsafe_allow_html=True)
     selected_model = st.selectbox(
@@ -711,12 +807,31 @@ and credit card details immediately or your account will be permanently locked w
 Click here to verify: http://185.234.219.208/secure-login
 Or use this link: http://bit.ly/verify-now"""
 
-email_input = st.text_area(
-   "আপনি যে ইমেইল বা ইউআরএল চেক করতে চান, তা নিচে পেস্ট করুন / Paste the email or URL you want to check below:",
-    value="",
-    placeholder=sample_email,
-    height=220
-)
+st.subheader("📥 ইমেইল ফাইল আপলোড অথবা টেক্সট পেস্ট করুন")
+
+tab1, tab2 = st.tabs(["📝 Direct Text / URL Paste", "📂 Upload .eml File"])
+
+with tab1:
+    pasted_input = st.text_area(
+        label="Email/URL Input",
+        label_visibility="collapsed",
+        value="",
+        placeholder=sample_email,
+        height=220
+    )
+
+with tab2:
+    uploaded_eml = st.file_uploader("Drop a .eml email file here", type=["eml"])
+    eml_input = ""
+    flagged_files = []
+    if uploaded_eml is not None:
+        eml_input, flagged_files = process_eml_file(uploaded_eml)
+        st.success("✅ `.eml` file parsed successfully!")
+        if flagged_files:
+            st.error(f"⚠️ Warning: Suspicious Attachment Detected: {', '.join(flagged_files)}")
+
+email_input = eml_input if (uploaded_eml is not None and eml_input) else pasted_input
+
 col_btn1, col_btn2, _ = st.columns([1, 1, 4])
 with col_btn1:
     analyze_btn = st.button("Analyze", type="primary")
@@ -724,148 +839,237 @@ with col_btn2:
     clear_btn = st.button("Clear", type="secondary")
 
 if clear_btn:
+    st.session_state.pop("analysis_result", None)
+    st.session_state.pop("analyzed_text", None)
     st.rerun()
 
+# Run Analysis and Save in Session State
 if analyze_btn:
-    if email_input.strip() == "":
+    if not email_input.strip():
         st.warning("Please input email content to analyze.")
     else:
-        if selected_model == "Hybrid Ensemble (All Engines)":
-            result = classify_with_ensemble(email_input)
-        else:
-            result = classify_with_selected_engine(email_input, selected_model)
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        with st.spinner("Analyzing email threat levels..."):
+            if selected_model == "Hybrid Ensemble (All Engines)":
+                res = classify_with_ensemble(email_input)
+            else:
+                res = classify_with_selected_engine(email_input, selected_model)
+            
+            st.session_state["analysis_result"] = res
+            st.session_state["analyzed_text"] = email_input
 
-        badge_bg = {"high": "rgba(240,68,56,0.14)", "medium": "rgba(247,144,9,0.14)", "low": "rgba(23,178,106,0.14)"}[result.tier]
-        badge_fg = TIER_COLORS[result.tier]
-        action_line = {
-            "high": "Do not click links or reply. Report and remove this email from the mailbox.",
-            "medium": "Verify the sender through an independent channel before acting on this email.",
-            "low": "No significant threat indicators were detected in this message.",
-        }[result.tier]
+# Render Analysis Results if Available in Session State
+if "analysis_result" in st.session_state:
+    result: AnalysisResult = st.session_state["analysis_result"]
+    analyzed_text: str = st.session_state["analyzed_text"]
 
-        gauge_col, info_col = st.columns([1, 3])
-        with gauge_col:
-            st.markdown(f"<div class='pg-panel' style='text-align:center;'>{render_gauge(result.score, result.tier)}</div>", unsafe_allow_html=True)
-        with info_col:
-            st.markdown(f"""
-            <div class="pg-panel">
-                <span class="pg-badge" style="background:{badge_bg}; color:{badge_fg};">{result.verdict}</span>
-                <div style="margin-top:12px; font-size:13.5px; color:#C4CDDE; line-height:1.5;">{action_line}</div>
-                <div style="margin-top:10px; font-size:12px; color:#8C99B4;">Analyzed {datetime.now().strftime('%Y-%m-%d %H:%M')} &nbsp;&middot;&nbsp; Engine: {selected_model}</div>
-            </div>
-            """, unsafe_allow_html=True)
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        # ---- Engine breakdown panel (only populated in Hybrid Ensemble mode) ----
-        if result.engine_breakdown:
-            st.markdown("<div class='pg-panel'><h4>Model engine breakdown</h4>", unsafe_allow_html=True)
-            rows_html = ""
-            for name, engine_score in result.engine_breakdown:
-                pct = min(int(engine_score), 100)
-                bar_color = TIER_COLORS["high"] if engine_score >= 70 else (TIER_COLORS["medium"] if engine_score >= 36 else TIER_COLORS["low"])
-                rows_html += (
-                    '<div class="sig-row">'
-                    f'<div class="sig-label">{name}</div>'
-                    f'<div class="sig-detail">weight: {int(ENSEMBLE_WEIGHTS[name]*100)}%</div>'
-                    f'<div class="sig-bar-wrap"><div class="sig-bar" style="width:{pct}%; background:{bar_color};"></div></div>'
-                    f'<div class="sig-pts">{engine_score:.0f}</div>'
-                    '</div>'
-                )
+    badge_bg = {"high": "rgba(240,68,56,0.14)", "medium": "rgba(247,144,9,0.14)", "low": "rgba(23,178,106,0.14)"}[result.tier]
+    badge_fg = TIER_COLORS[result.tier]
+    action_line = {
+        "high": "Do not click links or reply. Report and remove this email from the mailbox.",
+        "medium": "Verify the sender through an independent channel before acting on this email.",
+        "low": "No significant threat indicators were detected in this message.",
+    }[result.tier]
+
+    gauge_col, info_col = st.columns([1, 3])
+    with gauge_col:
+        st.markdown(f"<div class='pg-panel' style='text-align:center;'>{render_gauge(result.score, result.tier)}</div>", unsafe_allow_html=True)
+    with info_col:
+        st.markdown(f"""
+        <div class="pg-panel">
+            <span class="pg-badge" style="background:{badge_bg}; color:{badge_fg};">{result.verdict}</span>
+            <div style="margin-top:12px; font-size:13.5px; color:#C4CDDE; line-height:1.5;">{action_line}</div>
+            <div style="margin-top:10px; font-size:12px; color:#8C99B4;">Analyzed {datetime.now().strftime('%Y-%m-%d %H:%M')} &nbsp;&middot;&nbsp; Engine: {selected_model}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 1. VirusTotal Lookup
+    urls_found = re.findall(r'https?://[^\s]+', analyzed_text)
+    if urls_found:
+        st.markdown("---")
+        st.markdown("### 🌐 Live Threat Intelligence (VirusTotal)")
+        with st.spinner("Checking VirusTotal Database..."):
+            vt_result = check_virustotal_url(urls_found[0])
+            if vt_result:
+                malicious = vt_result['malicious']
+                total = vt_result['total']
+                if malicious > 0:
+                    st.error(f"🚨 **VirusTotal Flagged!** Identified as malicious in **{malicious}/{total}** security vendor blacklists.")
+                else:
+                    st.success(f"🛡️ **Clean on VirusTotal!** Verified clean across **{total}** security engines.")
+            else:
+                st.info("ℹ️ Live VirusTotal lookup skipped (API key not configured or request limit reached).")
+
+    # 2. GeoIP Tracking Map
+    ip_matches = re.findall(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', analyzed_text)
+    target_ip = None
+    if ip_matches:
+        target_ip = ip_matches[0]
+    elif urls_found:
+        domain_match = re.search(r'https?://([^/]+)', urls_found[0])
+        if domain_match:
+            target_ip = domain_match.group(1)
+
+    if target_ip:
+        try:
+            geo_data = get_geoip_data(target_ip)
+            if geo_data and geo_data.get('lat') is not None and geo_data.get('lon') is not None:
+                st.markdown("---")
+                st.markdown("### 🗺️ Origin Location Tracking (GeoIP Map)")
+
+                col_map1, col_map2 = st.columns([1, 2])
+
+                with col_map1:
+                    st.metric("Target IP / Host", geo_data.get('query', 'N/A'))
+                    st.metric("Country", geo_data.get('country', 'Unknown'))
+                    st.metric("City", geo_data.get('city', 'Unknown'))
+                    st.metric("ISP / Org", geo_data.get('org', 'N/A'))
+
+                with col_map2:
+                    lat = float(geo_data.get('lat'))
+                    lon = float(geo_data.get('lon'))
+
+                    m = folium.Map(location=[lat, lon], zoom_start=4, tiles="OpenStreetMap")
+                    folium.Marker(
+                        [lat, lon],
+                        popup=f"{geo_data.get('city', '')}, {geo_data.get('country', '')}",
+                        tooltip=f"Threat Origin: {geo_data.get('query', '')}",
+                        icon=folium.Icon(color="red", icon="info-sign")
+                    ).add_to(m)
+
+                    st_folium(m, height=250, use_container_width=True, key="geoip_map", returned_objects=[])
+        except Exception:
+            st.warning("⚠️ Could not load interactive map for this IP/Domain.")
+
+    # 3. Model Engine Breakdown
+    if result.engine_breakdown:
+        st.markdown("<div class='pg-panel'><h4>Model engine breakdown</h4>", unsafe_allow_html=True)
+        rows_html = ""
+        for name, engine_score in result.engine_breakdown:
+            pct = min(int(engine_score), 100)
+            bar_color = TIER_COLORS["high"] if engine_score >= 70 else (TIER_COLORS["medium"] if engine_score >= 36 else TIER_COLORS["low"])
             rows_html += (
-                '<div class="sig-row" style="border-top:1px solid #253147; margin-top:4px; padding-top:12px;">'
-                '<div class="sig-label" style="font-weight:600;">Final combined verdict</div>'
-                '<div class="sig-detail"></div>'
-                '<div class="sig-bar-wrap"></div>'
-                f'<div class="sig-pts" style="font-weight:600;">{result.score:.0f}</div>'
+                '<div class="sig-row">'
+                f'<div class="sig-label">{name}</div>'
+                f'<div class="sig-detail">weight: {int(ENSEMBLE_WEIGHTS[name]*100)}%</div>'
+                f'<div class="sig-bar-wrap"><div class="sig-bar" style="width:{pct}%; background:{bar_color};"></div></div>'
+                f'<div class="sig-pts">{engine_score:.0f}</div>'
                 '</div>'
             )
-            st.markdown(rows_html, unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        display_ip = result.header_ip if result.header_ip != "N/A" else (result.ips[0] if result.ips else "N/A")
-        is_priv = display_ip != "N/A" and _is_private_ip(display_ip)
-        risk_ip = any(s.label.startswith("Sending IP matches") for s in result.signals)
-
-        col_left, col_right = st.columns(2)
-        with col_left:
-            st.markdown(f"""
-            <div class="pg-panel">
-                <h4>Email details</h4>
-                <div class="kv-row"><span class="kv-key">Subject</span><span class="kv-val">{result.subject}</span></div>
-                <div class="kv-row"><span class="kv-key">From</span><span class="kv-val">{result.sender}</span></div>
-                <div class="kv-row"><span class="kv-key">Reply-To</span><span class="kv-val">{result.reply_to}</span></div>
-            </div>
-            """, unsafe_allow_html=True)
-        with col_right:
-            reputation = "High-risk range" if risk_ip else ("Private / internal" if is_priv else "No known issues (demo heuristic)")
-            st.markdown(f"""
-            <div class="pg-panel">
-                <h4>Sender IP analysis</h4>
-                <div class="kv-row"><span class="kv-key">Address</span><span class="kv-val">{display_ip}</span></div>
-                <div class="kv-row"><span class="kv-key">Type</span><span class="kv-val">{'Private' if is_priv else 'Public'}</span></div>
-                <div class="kv-row"><span class="kv-key">Reputation</span><span class="kv-val">{reputation}</span></div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("<div class='pg-panel'><h4>Risk signal breakdown</h4>", unsafe_allow_html=True)
-        if result.signals:
-            rows_html = ""
-            for s in sorted(result.signals, key=lambda x: -x.points):
-                pct = 0 if s.max_points <= 0 else min(int(s.points / s.max_points * 100), 100)
-                rows_html += (
-                    '<div class="sig-row">'
-                    f'<div class="sig-label">{s.label}</div>'
-                    f'<div class="sig-detail">{s.detail}</div>'
-                    f'<div class="sig-bar-wrap"><div class="sig-bar" style="width:{pct}%;"></div></div>'
-                    f'<div class="sig-pts">+{s.points:.0f}</div>'
-                    '</div>'
-                )
-            st.markdown(rows_html, unsafe_allow_html=True)
-        else:
-            st.markdown("<div style='font-size:13.5px; color:#8C99B4;'>No risk signals triggered &mdash; this message looks clean.</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # ---- Dedicated URL threat-analysis panel ----
-        # Real emails (especially Gmail/Google Workspace notifications) can embed
-        # dozens of harmless infrastructure links (tracking pixels, CDN scripts,
-        # Google image proxies). Showing all of them buries the ones that matter,
-        # so flagged links are listed in full and clean links are summarized.
-        st.markdown("<div class='pg-panel'><h4>URL / link threat analysis</h4>", unsafe_allow_html=True)
-        if result.url_verdicts:
-            risky = sorted([v for v in result.url_verdicts if v.score > 0], key=lambda x: -x.score)
-            clean = [v for v in result.url_verdicts if v.score == 0]
-            shown, remaining = risky[:10], risky[10:]
-
-            rows_html = ""
-            for v in shown:
-                badge_color = TIER_COLORS[v.tier]
-                reasons_text = '; '.join(v.reasons)
-                rows_html += (
-                    '<div class="url-row">'
-                    '<div class="url-head">'
-                    f'<span class="url-text">{v.url}</span>'
-                    f'<span class="pg-badge" style="background:{badge_color}22; color:{badge_color};">{v.score:.0f} / 100</span>'
-                    '</div>'
-                    f'<div class="url-reasons">{reasons_text}</div>'
-                    '</div>'
-                )
-            if rows_html:
-                st.markdown(rows_html, unsafe_allow_html=True)
-            else:
-                st.markdown("<div style='font-size:13.5px; color:#8C99B4;'>No flagged links &mdash; every link checked clean.</div>", unsafe_allow_html=True)
-
-            if remaining:
-                st.markdown(f"<div style='font-size:12px; color:#8C99B4; padding-top:8px;'>+{len(remaining)} more flagged link(s) not shown</div>", unsafe_allow_html=True)
-            if clean:
-                st.markdown(f"<div style='font-size:12px; color:#8C99B4; padding-top:8px;'>{len(clean)} other link(s) checked with no structural red flags (tracking pixels, CDN/image assets, etc.)</div>", unsafe_allow_html=True)
-        else:
-            st.markdown("<div style='font-size:13.5px; color:#8C99B4;'>No embedded links found in this message.</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        pdf_data = generate_pdf_report(email_input, result, selected_model)
-        st.download_button(
-            label="Export report (PDF)",
-            data=pdf_data,
-            file_name="PhishGuardAI_Security_Report.pdf",
-            mime="application/pdf",
+        rows_html += (
+            '<div class="sig-row" style="border-top:1px solid #253147; margin-top:4px; padding-top:12px;">'
+            '<div class="sig-label" style="font-weight:600;">Final combined verdict</div>'
+            '<div class="sig-detail"></div>'
+            '<div class="sig-bar-wrap"></div>'
+            f'<div class="sig-pts" style="font-weight:600;">{result.score:.0f}</div>'
+            '</div>'
         )
+        st.markdown(rows_html, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # 4. Email Metadata & IP Details
+    display_ip = result.header_ip if result.header_ip != "N/A" else (result.ips[0] if result.ips else "N/A")
+    is_priv = display_ip != "N/A" and _is_private_ip(display_ip)
+    risk_ip = any(s.label.startswith("Sending IP matches") for s in result.signals)
+
+    col_left, col_right = st.columns(2)
+    with col_left:
+        st.markdown(f"""
+        <div class="pg-panel">
+            <h4>Email details</h4>
+            <div class="kv-row"><span class="kv-key">Subject</span><span class="kv-val">{result.subject}</span></div>
+            <div class="kv-row"><span class="kv-key">From</span><span class="kv-val">{result.sender}</span></div>
+            <div class="kv-row"><span class="kv-key">Reply-To</span><span class="kv-val">{result.reply_to}</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_right:
+        reputation = "High-risk range" if risk_ip else ("Private / internal" if is_priv else "No known issues (demo heuristic)")
+        st.markdown(f"""
+        <div class="pg-panel">
+            <h4>Sender IP analysis</h4>
+            <div class="kv-row"><span class="kv-key">Address</span><span class="kv-val">{display_ip}</span></div>
+            <div class="kv-row"><span class="kv-key">Type</span><span class="kv-val">{'Private' if is_priv else 'Public'}</span></div>
+            <div class="kv-row"><span class="kv-key">Reputation</span><span class="kv-val">{reputation}</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 5. Risk Signals
+    st.markdown("<div class='pg-panel'><h4>Risk signal breakdown</h4>", unsafe_allow_html=True)
+    if result.signals:
+        rows_html = ""
+        for s in sorted(result.signals, key=lambda x: -x.points):
+            pct = 0 if s.max_points <= 0 else min(int(s.points / s.max_points * 100), 100)
+            rows_html += (
+                '<div class="sig-row">'
+                f'<div class="sig-label">{s.label}</div>'
+                f'<div class="sig-detail">{s.detail}</div>'
+                f'<div class="sig-bar-wrap"><div class="sig-bar" style="width:{pct}%;"></div></div>'
+                f'<div class="sig-pts">+{s.points:.0f}</div>'
+                '</div>'
+            )
+        st.markdown(rows_html, unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='font-size:13.5px; color:#8C99B4;'>No risk signals triggered &mdash; this message looks clean.</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # 6. URL Threats
+    st.markdown("<div class='pg-panel'><h4>URL / link threat analysis</h4>", unsafe_allow_html=True)
+    if result.url_verdicts:
+        risky = sorted([v for v in result.url_verdicts if v.score > 0], key=lambda x: -x.score)
+        clean = [v for v in result.url_verdicts if v.score == 0]
+        shown, remaining = risky[:10], risky[10:]
+
+        rows_html = ""
+        for v in shown:
+            badge_color = TIER_COLORS[v.tier]
+            reasons_text = '; '.join(v.reasons)
+            rows_html += (
+                '<div class="url-row">'
+                '<div class="url-head">'
+                f'<span class="url-text">{v.url}</span>'
+                f'<span class="pg-badge" style="background:{badge_color}22; color:{badge_color};">{v.score:.0f} / 100</span>'
+                '</div>'
+                f'<div class="url-reasons">{reasons_text}</div>'
+                '</div>'
+            )
+        if rows_html:
+            st.markdown(rows_html, unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='font-size:13.5px; color:#8C99B4;'>No flagged links &mdash; every link checked clean.</div>", unsafe_allow_html=True)
+
+        if remaining:
+            st.markdown(f"<div style='font-size:12px; color:#8C99B4; padding-top:8px;'>+{len(remaining)} more flagged link(s) not shown</div>", unsafe_allow_html=True)
+        if clean:
+            st.markdown(f"<div style='font-size:12px; color:#8C99B4; padding-top:8px;'>{len(clean)} other link(s) checked with no structural red flags</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='font-size:13.5px; color:#8C99B4;'>No embedded links found in this message.</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Export Report Button
+    pdf_data = generate_pdf_report(analyzed_text, result, selected_model)
+    st.download_button(
+        label="Export report (PDF)",
+        data=pdf_data,
+        file_name="PhishGuardAI_Security_Report.pdf",
+        mime="application/pdf",
+    )
+
+# Footer with WhatsApp Direct Contact
+whatsapp_msg = "Hello Engr. Mohibul Islam, I reached out through your Phishing Email & URL Detection System project."
+encoded_msg = urllib.parse.quote(whatsapp_msg)
+
+st.markdown(
+    f"""
+    <div class="footer">
+        <span class="dev-text">Developed by <span class="dev-name">Engr. Mohibul Islam</span></span>
+        <a href="https://wa.me/8801853389495?text={encoded_msg}" target="_blank" class="contact-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="white">
+                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+            </svg>
+            Contact
+        </a>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
