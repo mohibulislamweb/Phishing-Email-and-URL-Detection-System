@@ -8,7 +8,6 @@ This academic project was developed by:
 
 - **Mohibul Islam** (Roll: `38`) — *Project Lead & Lead Systems Architect / ML & Security Integrations*
 - **Nazmul** (Roll: `16`) — *Data Processing & Heuristics Rule Engine*
-- **Riaz** (Roll: `44`) — *UI/UX & PDF Generation Pipeline*
 
 ---
 
