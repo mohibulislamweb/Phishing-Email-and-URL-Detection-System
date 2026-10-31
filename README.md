@@ -80,3 +80,4 @@ Phishing-Email-and-URL-Detection-System/
 - **Threat Intelligence & Network:** VirusTotal v3 REST API, `GeoIP (ip-api.com)` Services, `requests`
 - **Machine Learning & Processing:** `scikit-learn`, `pandas`, `numpy`
 - **Email Parsing & PDF:** Native Python `email` module, `ReportLab`
+Contributed by Nazmul
