@@ -1,0 +1,201 @@
+text,label
+"Urgent: Your account is locked, click here to verify now",1
+"Hi, please find the meeting agenda attached for tomorrow",0
+"Suspicious login detected, update your password immediately",1
+"Hello team, let us connect at 4 PM today",0
+"Your PayPal account has been limited, verify your identity within 24 hours",1
+"Attached is the invoice for last month's services",0
+"Congratulations! You have won a lottery prize, claim it now",1
+"Reminder: your dentist appointment is scheduled for Friday",0
+"Your Netflix payment failed, update your billing information immediately",1
+"The quarterly report is ready for your review",0
+"Security Alert: Someone tried to access your Apple ID from an unknown device. Verify now.",1
+"Hey Mohibul, let us grab coffee at the campus cafeteria around 2 PM.",0
+"Your bank account will be suspended unless you confirm your debit card PIN.",1
+"Please review the attached project proposal for the software engineering lab.",0
+"Final Notice: Tax refund pending of 15,000 BDT. Click the link to claim your money.",1
+"Your Uber ride receipt for yesterday's trip is attached in your email.",0
+"URGENT: Your Gmail storage is full. Click here to upgrade your account instantly.",1
+"Good morning! The class routine for the upcoming semester has been published.",0
+"Your Binance wallet has been frozen due to suspicious activity. Verify credentials immediately.",1
+"Please find attached the slides from today's operating systems lecture.",0
+"Alert: Your bKash account needs KYC verification. Click the link below to avoid blocking.",1
+"Your weekly team project sync is scheduled for Monday at 10 AM on Zoom.",0
+"WINNER! You have been selected for a free iPhone 15 Plus. Claim your reward now!",1
+"Hi sir, the assignment files have been uploaded to the university portal.",0
+"Your Amazon order has shipped and will be delivered by tomorrow afternoon.",1
+"Your subscription renewal for Spotify was completed successfully. No action is required.",0
+"Warning: Unauthorized transaction of $500 detected on your credit card. Click to cancel.",1
+"The monthly electricity statement is ready in your customer portal.",0
+"Your Outlook mailbox is about to expire. Update your password to keep using it.",1
+"Thanks for attending the seminar today. Here is the certificate of participation.",0
+"Urgent update required: Your NID verification has failed. Update details immediately.",1
+"Please let me know when you reach home safely. Good night!",0
+"Your courier parcel is on hold because of incorrect address details. Update now.",1
+"The lab practical examination schedule has been finalized by the department head.",0
+"Security Warning: New sign-in from Windows PC in Dhaka. If this was not you, secure account.",1
+"Your GitHub security key was added to your profile successfully.",0
+"Claim your free internet data pack of 50GB by clicking this malicious-looking link.",1
+"The database server maintenance is scheduled for tonight from 11 PM to 1 AM.",0
+"Your Microsoft 365 license is expiring today. Renew immediately to avoid disruption.",1
+"Hey, are we still on for the group study session at the library?",0
+"Dear customer, your electricity bill is overdue. Pay immediately to avoid disconnection.",1
+"Your flight ticket booking reference and boarding pass details are attached.",0
+"Account alert: Your payment authorization failed. Update your card CVV and details.",1
+"Please check the updated repository on GitHub for the latest bug fixes.",0
+"Urgent action required: Your tax identification number needs immediate re-validation.",1
+"The system backup completed successfully with zero errors reported.",0
+"Congratulations, you are our 1,000,000th visitor! Click to claim your cash prize.",1
+"Here are the notes for the technical writing and presentation course assignment.",0
+"Your Google Drive storage is exhausted. Click here to secure extra space for free.",1
+"Have a great weekend! See you in class on Sunday morning.",0
+"Please update your project repository link in the shared Google Sheet before the urgent deadline.",0
+"Urgent reminder: Submit your semester registration form at the academic office by tomorrow.",0
+"We noticed a new login to your account from Chrome on Windows. If this was you, no action is needed.",0
+"Click the official Zoom link below to join today's software engineering workshop at 3 PM.",0
+"Your bank statement for October 2026 is now available for download inside your mobile banking app.",0
+"Please verify your attendance for the upcoming programming contest using your university email.",0
+"Thank you for updating your profile information on the student portal.",0
+"Your order #45892 from Daraz has been delivered. Thank you for shopping with us!",0
+"Could you please send me the link to the dataset we discussed during yesterday's lab?",0
+"Important: The server migration is scheduled for Sunday. Please save your work beforehand.",0
+"Your OTP for Nagad transaction is 849201. Do not share this PIN with anyone.",0
+"Here is the receipt for your recent domain renewal on Namecheap.",0
+"Let's review the pull request and merge the changes into the main branch tonight.",0
+"Your passport application status has been updated. Check the official portal for details.",0
+"Reminder: Your credit card bill payment of 5,000 BDT was received successfully.",0
+"Please find the attached PDF containing the syllabus and grading policy for this course.",0
+"We are excited to invite you to the annual tech fest at Dhaka International University.",0
+"Your package is out for delivery today. Our rider will call you shortly.",0
+"Kindly confirm your availability for the technical interview scheduled on Thursday.",0
+"Your password was changed successfully. If you did not make this change, contact support.",0
+"Here is the link to the shared Figma design file for our web application.",0
+"Monthly newsletter: Top machine learning trends and research papers for November.",0
+"Your ticket for the tech conference has been confirmed. Show the QR code at the entrance.",0
+"Please review the updated API documentation before starting the frontend integration.",0
+"Thank you for subscribing to our developer blog. You can unsubscribe anytime.",0
+"Your Nagad account has been temporarily blocked! Send your PIN and OTP to unlock: http://nagad-verify-bd.xyz",1
+"Congratulations! You have been selected for a work-from-home job earning 5000 BDT daily. Click http://bit.ly/job-offer-bd",1
+"URGENT: Your Facebook page violates copyright rules and will be deleted in 12 hours. Appeal here: http://fb-support-appeal.com",1
+"Dear user, you received a 25,000 BDT government eid bonus. Claim now before midnight at http://gov-bonus-claim.net",1
+"Warning: Your SSL certificate has expired! Renew immediately at http://secure-ssl-update.org to avoid site suspension.",1
+"Your DHL package could not be delivered due to unpaid customs fee of $2.99. Pay here: http://dhl-track-fee.info",1
+"Alert: Unusual sign-in attempt from Russia on your LinkedIn account. Verify identity: http://linkedin-security-check.co",1
+"You have an unclaimed inheritance of $2,500,000 from a distant relative. Reply with your bank details.",1
+"Final Warning: Your domain name will be permanently deleted today. Click to renew now: http://domain-renew-urgent.com",1
+"Free iPhone 16 Pro Max giveaway! Only 5 left. Complete this short survey to claim yours: http://win-apple-prize.xyz",1
+"Your WhatsApp verification code was requested on another device. Click here to stop it: http://whatsapp-sec-alert.net",1
+"Dear customer, your Dutch-Bangla Bank ATM card is deactivated. Call or visit http://dbbl-card-active.com immediately.",1
+"Hot singles in your area want to chat with you! Click here to see private photos now.",1
+"Your PC is infected with 5 dangerous viruses! Download our free antivirus tool immediately: http://pc-cleaner-fix.exe",1
+"IRS / NBR Tax Notice: You are eligible for a stimulus check. Submit your NID and bank account number here.",1
+"Exclusive Crypto Airdrop: Send 0.1 ETH to this address and get 1.0 ETH back instantly!",1
+"Your Instagram badge verification is approved. Log in with your password here to activate: http://insta-blue-tick.co",1
+"Attention: Your mobile number won 10 Lakh Taka in the telecom raffle draw! Call now to claim.",1
+"Security breach detected on your router. Update firmware immediately using this link: http://router-admin-fix.net",1
+"Your Payoneer account requires immediate tax form submission or funds will be frozen: http://payoneer-tax-update.org",1
+"URGENT: Your CEO wants you to purchase 5 Google Play gift cards immediately and email the codes.",1
+"Click here to download the leaked exam questions for next week's final test: http://free-exam-leaks.xyz",1
+"Your Spotify Premium family plan payment was declined. Re-enter card details: http://spotify-billing-fix.com",1
+"Notice: Court summon issued against your name. Download the case file here: http://legal-notice-doc.zip",1
+"Claim your free 100GB Grameenphone internet offer valid for 30 days! Click http://gp-free-net-offer.xyz",1
+"Your Vercel deployment for Desh Transport succeeded. View live preview at https://desh-transport.vercel.app",0
+"Can you push the latest MongoDB schema changes to the GitHub repository before 9 PM?",0
+"Your monthly internet bill of 1,200 BDT has been paid via bKash. Transaction ID: 9A8B7C6D.",0
+"Reminder: Faculty evaluation survey is open until Friday. Log in to the university ERP to complete it.",0
+"Welcome to AWS Educate! Your free cloud credits have been applied to your student account.",0
+"Please bring your lab manual and student ID card to room 402 tomorrow at 11 AM.",0
+"Your GitHub pull request #14 was merged by team lead. Great work on the UI responsiveness!",0
+"Here is the Google Drive link containing photos from our Comilla trip last weekend.",0
+"Your food order from Foodpanda is being prepared and will arrive in 25 minutes.",0
+"Notification: Your LinkedIn profile appeared in 34 searches this week.",0
+"Please find the attached salary slip and tax deduction certificate for the fiscal year.",0
+"Hey, are you free tonight? Let's test the REST API endpoints using Postman.",0
+"Your bus ticket from Dhaka to Chittagong is confirmed. Seat number: B1, Departure: 10:30 PM.",0
+"Thank you for registering for the National Hackathon 2026. Team details are attached.",0
+"Your Google Cloud free trial ends in 7 days. Upgrade to a paid account only if you wish to continue.",0
+"Hi, I have shared the Overleaf LaTeX template for our final thesis report with you.",0
+"Your doctor's appointment at Square Hospital is confirmed for Monday at 6:00 PM.",0
+"Your Coursera certificate for Machine Learning Specialization is ready to download.",0
+"Please review the updated privacy policy on our official website. No action is required from your side.",0
+"Your electricity meter recharge of 500 BDT was successful. Token number: 4512-8965-2314.",0
+"Let's reschedule our sprint planning meeting to Wednesday morning at 10:30 AM.",0
+"Your SSL certificate for custom domain was automatically renewed by Cloudflare.",0
+"Thank you for your feedback! Our customer support team will get back to you within 24 hours.",0
+"Your railway e-ticket PDF is attached. Please carry a valid NID during the journey.",0
+"Reminder: Submit your thesis abstract to the supervisor via email by Sunday evening.",0
+"Your Upwork withdrawal of $150 has been processed to your local bank account.",0
+"Here is the recording link for today's online lecture on Network Security and Cryptography.",0
+"Your book return due date at the central library is tomorrow. Renew online to avoid late fees.",0
+"We have updated our terms of service. Visit https://github.com/site/terms to read more.",0
+"Happy Birthday! Wishing you a fantastic year ahead filled with success and happiness.",0
+"Your npm package dependencies have been updated with zero security vulnerabilities.",0
+"Please confirm your shipping address for the hackathon t-shirt delivery.",0
+"Your YouTube channel crossed 1,000 subscribers! Check your creator studio dashboard.",0
+"Attached is the revised budget sheet for the upcoming Computer Programming Club event.",0
+"Your two-factor authentication (2FA) backup codes have been generated. Keep them safe.",0
+"Good news! Your internship application has been shortlisted for the coding assessment round.",0
+"The Wi-Fi password for the student hall has been updated. Check the notice board.",0
+"Your payment to Daraz Mart was successful. Track your order inside the app.",0
+"Let me know once you review the database ER diagram I sent on Messenger.",0
+"Your domain transfer request has been approved. DNS propagation may take up to 24 hours.",0
+"System Notification: Scheduled Windows security update will restart your PC at 2 AM.",0
+"Please sign the attached NDA document and send a scanned copy back to HR.",0
+"Your mobile recharge of 100 BDT on Robi was successful. Current balance: 105.50 BDT.",0
+"Join our Discord server to collaborate with other developers participating in the project.",0
+"Your Steam account guard code is X7Y9Z. Enter it to complete your login.",0
+"The midterm exam results have been published on the department notice board.",0
+"Thank you for donating blood at the campus blood donation camp today!",0
+"Your Grammarly weekly writing report is ready. You were more productive than 85% of users.",0
+"Please verify your email address by clicking the link in your account settings page.",0
+"See you at the seminar hall at 3 PM sharp. Don't forget to bring your laptop.",0
+"URGENT: Your bKash PIN has been compromised! Click http://bkash-security-bd.com to reset immediately.",1
+"Congratulations! Your email won $750,000 in the Microsoft Mega Promotion. Send name and phone number.",1
+"Security Alert: Suspicious login on your Facebook from China. Cancel login: http://fb-login-alert.xyz",1
+"Your Rocket account will be closed today due to incomplete KYC. Update now: http://dutchbangla-kyc.net",1
+"Get a personal loan of up to 5 Lakh Taka with 0% interest! Apply instantly at http://bd-easy-loan.xyz",1
+"FINAL NOTICE: Unpaid traffic violation fine of 2,500 BDT. Pay online at http://brta-fine-pay.info to avoid arrest.",1
+"You have received a voice message from an unknown number. Listen here: http://voicemail-play-audio.exe",1
+"Your Apple iCloud storage is full and photos will be deleted in 24 hours! Upgrade: http://icloud-storage-fix.com",1
+"Dear Valued Customer, your City Bank credit card has been blocked. Unlock at http://citybank-secure-login.co",1
+"Work from home for Google! Earn 3,000 BDT per hour liking YouTube videos. Join Telegram: http://t.me/fake_job_bd",1
+"Warning: Your computer IP address is broadcasting illegal activity. Call Microsoft Support: +1-800-999-FAKE",1
+"Claim your free Netflix 1-year premium subscription! Offer valid for first 100 users: http://free-netflix-bd.xyz",1
+"Your Binance API key is about to expire. Re-authenticate immediately: http://binance-api-auth.org",1
+"Alert: Someone added a new recovery phone number to your Gmail. If not you, click http://google-account-recover.net",1
+"Exclusive Offer: Buy iPhone 15 Pro Max for only 15,000 BDT! Cash on delivery: http://cheap-iphone-bd.shop",1
+"Your parcel from Sundarban Courier is stuck at the warehouse. Confirm address: http://sundarban-track-bd.info",1
+"URGENT: Your university student portal password expires in 2 hours. Keep same password: http://diu-portal-update.xyz",1
+"You have been chosen to receive a $500 Amazon Gift Card! Complete 3 questions: http://amazon-survey-win.net",1
+"Bank Alert: 45,000 BDT debited from your Islami Bank account. If unauthorized, cancel here: http://ibbl-dispute.com",1
+"Free 50GB Banglalink Eid Bonus! Dial *5000*99# or click http://bl-eid-offer.xyz to activate now.",1
+"Your GitHub repository has been flagged for DMCA violation. Appeal within 24 hours: http://github-dmca-appeal.co",1
+"Hot crypto tip: Elon Musk is giving away free Bitcoin! Send 0.05 BTC to receive 0.5 BTC back.",1
+"Your Zoom account has been suspended due to policy violation. Reactivate here: http://zoom-account-verify.org",1
+"Dear Beneficiary, your United Nations COVID-19 compensation fund of $1.5M is ready for wire transfer.",1
+"Attention: Your SIM card will be deactivated tonight due to biometric mismatch. Re-verify: http://sim-biometric-bd.com",1
+"Your PayPal account has been used at an unauthorized store. Dispute transaction: http://paypal-resolution-center.info",1
+"Download the cracked version of Adobe Photoshop 2026 for free! Click here: http://get-free-software-crack.zip",1
+"Security Warning: Your Wi-Fi router has been hacked. Download security patch: http://router-patch-update.exe",1
+"Congratulations! You qualified for a fully funded scholarship in Canada. Pay registration fee: http://canada-visa-grant.xyz",1
+"Your Upay wallet received 10,000 BDT cashback! Enter your PIN to accept the money: http://upay-cashback-claim.net",1
+"URGENT: HR Department sent you a confidential salary revision document. Open here: http://hr-salary-doc.scr",1
+"Your MetaMask wallet requires mandatory KYC verification under new regulations: http://metamask-kyc-verify.io",1
+"Last Chance: Renew your vehicle fitness certificate online without inspection! Visit http://brta-express-service.xyz",1
+"Alert: Your LinkedIn account will be restricted due to suspicious scraping. Verify now: http://linkedin-auth-check.net",1
+"Win a brand new Yamaha R15 V4 bike in our lucky draw! Register with your NID: http://bike-raffle-bd.com",1
+"Your Dropbox shared file 'Confidential_Passwords.pdf' is ready to view. Sign in with email: http://dropbox-login-secure.co",1
+"Notice: Your water supply connection will be cut off tomorrow due to unpaid bill. Pay now: http://wasa-bill-pay.info",1
+"Free Spotify and YouTube Premium lifetime account generator! No password needed: http://premium-gen-free.xyz",1
+"Your Visa debit card is temporarily locked for international transactions. Enable here: http://visa-3d-secure-bd.com",1
+"URGENT: Wire $2,000 to this vendor account immediately, I am in a meeting and cannot call. - CEO",1
+"Claim your government youth unemployment allowance of 12,000 BDT/month! Apply: http://bd-youth-allowance.org",1
+"Your TikTok account is eligible for Creator Fund monetization! Log in to claim: http://tiktok-creator-payout.xyz",1
+"Warning: Illegal login attempt blocked from IP 192.168.1.105. Download security log: http://security-report-log.exe",1
+"Your Pathao account has a pending refund of 850 BDT. Claim to your wallet: http://pathao-refund-claim.net",1
+"Exclusive VIP signal group for Forex trading! Turn 5,000 BDT into 50,000 BDT in 2 days: http://forex-vip-profit.xyz",1
+"Your Adobe Creative Cloud trial expired. Update credit card to avoid losing files: http://adobe-billing-renew.co",1
+"Alert: Your Telegram account is scheduled for deletion. Cancel request immediately: http://telegram-support-cancel.org",1
+"Congratulations! Your mobile number has been selected for a free 5G SIM upgrade: http://5g-sim-upgrade-bd.com",1
+"Your Steam inventory items are at risk of being traded. Verify trade lock here: http://steam-guard-verify.xyz",1
+"Final Reminder: Claim your unclaimed tax rebate before the portal closes tonight: http://nbr-tax-rebate.info",1
