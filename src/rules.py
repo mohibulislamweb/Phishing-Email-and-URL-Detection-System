@@ -31,17 +31,19 @@ def evaluate_rules(text: str) -> Tuple[float, List[str]]:
 
     # 1. Benign Context Suppression (False Positive Mitigation)
     has_benign_context = any(re.search(pattern, lower) for pattern in BENIGN_PATTERNS)
-    if has_benign_context:
+    
+    # যদি বেনাইন বা নিরাপদ কন্টেক্সট মিলে যায় এবং ইমেইলে কোনো সন্দেহজনক বা ফিশিং লিংক/ইউআরএল না থাকে[cite: 3]
+    if has_benign_context and "http" not in lower:
         reasons.append("Verified legitimate transactional/notification context detected (Safe Override)")
         return 0.0, reasons
 
-    # 2. Urgency checks
+    # 2. Urgency checks[cite: 3]
     for word in URGENCY_WORDS:
         if word in lower:
             score += 10
             reasons.append(f"Urgency keyword detected: '{word}'")
 
-    # 3. Credential keyword checks
+    # 3. Credential keyword checks[cite: 3]
     for word in CREDENTIAL_WORDS:
         if word in lower:
             score += 15
