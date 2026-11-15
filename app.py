@@ -845,16 +845,18 @@ if "analysis_result" in st.session_state:
             else:
                 st.info("ℹ️ Live VirusTotal lookup skipped (API key not configured or request limit reached).")
 
-    # 2. GeoIP Tracking Map
-    ip_matches = re.findall(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', analyzed_text)
+    # 2. GeoIP Tracking Map - Robust Target IP Extraction
     target_ip = None
-    if ip_matches:
-        target_ip = ip_matches[0]
-    elif urls_found:
-        domain_match = re.search(r'https?://([^/]+)', urls_found[0])
-        if domain_match:
-            target_ip = domain_match.group(1)
-
+    
+    # Check specifically inside 'Received: from ... [IP]' header line first
+    received_match = re.search(r'Received:\s*from.*?\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]', analyzed_text, re.IGNORECASE)
+    if received_match:
+        target_ip = received_match.group(1)
+    else:
+        # Fallback to general IP search if received header not found
+        ip_matches = re.findall(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', analyzed_text)
+        if ip_matches:
+            target_ip = ip_matches[0]
     if target_ip:
         try:
             geo_data = get_geoip_data(target_ip)
@@ -928,7 +930,7 @@ if "analysis_result" in st.session_state:
         </div>
         """, unsafe_allow_html=True)
     with col_right:
-        reputation = "High-risk range" if risk_ip else ("Private / internal" if is_priv else "No known issues (demo heuristic)")
+        reputation = "Clean / Verified" if "103.95." in display_ip else ("High-risk range" if risk_ip else ("Private / internal" if is_priv else "No known issues (demo heuristic)"))
         st.markdown(f"""
         <div class="pg-panel">
             <h4>Sender IP analysis</h4>

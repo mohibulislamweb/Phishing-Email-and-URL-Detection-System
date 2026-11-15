@@ -21,6 +21,7 @@ BENIGN_PATTERNS = [
     r"library books are due",
     r"monthly electricity statement",
     r"github security key was added",
+    r"your password was changed successfully",
 ]
 
 def evaluate_rules(text: str) -> Tuple[float, List[str]]:
